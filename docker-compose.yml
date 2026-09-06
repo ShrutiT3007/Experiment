@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  experiment-service:
+    build: .
+    ports:
+      - '3100:3100'
+    env_file:
+      - .env
+    depends_on:
+      - mysql
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: experiment_service
+      MYSQL_ROOT_PASSWORD: change_me
+    ports:
+      - '3306:3306'
+    volumes:
+      - experiment_mysql_data:/var/lib/mysql
+      - ./database/migrations:/docker-entrypoint-initdb.d
+
+volumes:
+  experiment_mysql_data:

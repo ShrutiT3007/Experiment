@@ -1,0 +1,12 @@
+process.env.NODE_ENV = 'test';
+process.env.QA_SERVER = 'https://qa.test.local';
+process.env.MOCK_SERVER = 'https://mock.test.local';
+process.env.ALLOWED_TARGET_HOSTS = 'qa.test.local,mock.test.local';
+process.env.LITELLM_API_KEY = 'test-key';
+process.env.LITELLM_BASE_URL = 'https://litellm.test.local';
+process.env.LLM_MODEL = 'glm-5';
+process.env.LOG_LEVEL = 'silent';
+process.env.DATABASE_URL = '';
+process.env.MAX_TESTCASES_PER_EXPERIMENT = '20';
+process.env.MAX_FLOW_STEPS = '20';
+process.env.MAX_CONCURRENCY = '10';
