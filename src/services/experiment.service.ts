@@ -20,6 +20,7 @@ import { createExecution, completeExecution } from '../models/execution.model';
 import { recordAssertion } from '../models/assertion.model';
 import { recordEvidence } from '../models/evidence.model';
 import { evaluateHypothesis, HypothesisEvaluation } from './assertion/hypothesis-evaluator';
+import { NormalizedServiceTriggerResult } from './experiment/normalizers/qa-result.normalizer';
 
 export type ExperimentLifecycleStatus =
   | 'CREATED'
@@ -90,6 +91,7 @@ export class ExperimentService {
       // logging the transition for observability (section 43).
 
       const serviceName = request.context?.service;
+      let existingQaFlowResults: NormalizedServiceTriggerResult | undefined;
 
       if (request.runPreviousQaFlows) {
         // serviceName is guaranteed by experimentRequestSchema's superRefine
@@ -98,16 +100,16 @@ export class ExperimentService {
         // the trigger request, never reimplement that lookup here.
         log.info({ operation: 'qa.triggerPreviousFlows', serviceName }, 'Triggering previous QA flows for service');
         try {
-          const triggerResult = await withTimeout(
+          existingQaFlowResults = await withTimeout(
             this.deps.qaAdapter.triggerServiceFlows({ serviceName: serviceName as string })
           );
           log.info(
             {
               operation: 'qa.triggerPreviousFlows',
               serviceName,
-              status: triggerResult.status,
-              flowsTriggered: triggerResult.flows.length,
-              flowIds: triggerResult.flows.map((f) => f.qaFlowId)
+              status: existingQaFlowResults.status,
+              flowsTriggered: existingQaFlowResults.flows.length,
+              flowIds: existingQaFlowResults.flows.map((f) => f.qaFlowId)
             },
             'Previous QA flows triggered'
           );
@@ -254,7 +256,8 @@ export class ExperimentService {
         assertions,
         hypothesisEvaluation,
         evidence,
-        generatedPlan: plan
+        generatedPlan: plan,
+        ...(existingQaFlowResults ? { EXISTING_QAFLOW_RESULTS: existingQaFlowResults } : {})
       };
     } catch (err) {
       const appError = err instanceof AppError ? err : AppError.internal((err as Error).message);

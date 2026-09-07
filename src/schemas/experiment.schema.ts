@@ -74,6 +74,31 @@ const hypothesisEvaluationSchema = z.object({
   assertionResults: z.array(assertionResultResponseSchema)
 });
 
+/** Result of triggering previously created QA flows for a service
+ * (runPreviousQaFlows=true), normalized from the QA framework's
+ * /services/trigger response. */
+const existingQaFlowResultsSchema = z.object({
+  serviceName: z.string().nullable(),
+  status: z.string().nullable(),
+  message: z.string().nullable(),
+  flows: z.array(
+    z.object({
+      qaFlowId: z.number().nullable(),
+      status: z.string().nullable(),
+      testcases: z.array(
+        z.object({
+          testcaseId: z.number().nullable(),
+          status: z.number().nullable(),
+          statusText: z.string().nullable(),
+          headers: z.record(z.string()),
+          body: z.unknown(),
+          passedByQa: z.boolean()
+        })
+      )
+    })
+  )
+});
+
 /** Public response contract returned to Person 1 -- the single source of truth shape. */
 export const experimentResultSchema = z.object({
   experimentId: z.string(),
@@ -116,6 +141,8 @@ export const experimentResultSchema = z.object({
   hypothesisEvaluation: hypothesisEvaluationSchema,
   evidence: z.array(z.string()),
   generatedPlan: z.unknown().optional(),
+  /** Only present when the request had runPreviousQaFlows=true. */
+  EXISTING_QAFLOW_RESULTS: existingQaFlowResultsSchema.optional(),
   error: z.string().optional()
 });
 
