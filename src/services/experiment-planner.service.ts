@@ -117,6 +117,22 @@ function normalizePlanMethods(parsed: unknown): void {
   }
 }
 
+/** The LLM sometimes omits `flow` entirely (e.g. single-testcase API
+ * experiments). Since a flow is just "run these testcases in this order",
+ * it's fully derivable from `testcases` -- so fill it in rather than
+ * failing schema validation over a field the model considered implicit. */
+function normalizePlanFlow(parsed: unknown): void {
+  if (!parsed || typeof parsed !== 'object') return;
+  const obj = parsed as { flow?: unknown; testcases?: unknown[]; objective?: unknown };
+  if (obj.flow && typeof obj.flow === 'object') return;
+  if (!Array.isArray(obj.testcases)) return;
+
+  obj.flow = {
+    name: typeof obj.objective === 'string' && obj.objective.trim() ? obj.objective.trim() : `Experiment Flow ${Date.now()}`,
+    testcaseOrder: obj.testcases.map((_, i) => i)
+  };
+}
+
 /**
  * Layer 1 of the architecture: Hypothesis -> GLM-5 -> structured
  * ExperimentPlan. This is the ONLY place the LLM is invoked. Everything
@@ -161,6 +177,7 @@ export class ExperimentPlanner {
     }
 
     normalizePlanMethods(parsed);
+    normalizePlanFlow(parsed);
 
     const result = experimentPlanSchema.safeParse(parsed);
     if (!result.success) {

@@ -22,9 +22,23 @@ export const experimentRequestSchema = z
       .string()
       .min(10, 'hypothesis must be a meaningful sentence (min 10 chars)')
       .max(2000),
-    context: experimentContextSchema.optional()
+    context: experimentContextSchema.optional(),
+    /** When true, also triggers all previously created QA flows for
+     * context.service via the QA service's /services/trigger endpoint
+     * (section: runPreviousQaFlows). Defaults to false -- existing
+     * callers/behavior are unaffected. */
+    runPreviousQaFlows: z.boolean().optional().default(false)
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.runPreviousQaFlows && !data.context?.service?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['context', 'service'],
+        message: 'context.service is required when runPreviousQaFlows is true'
+      });
+    }
+  });
 
 export type ExperimentContext = z.infer<typeof experimentContextSchema>;
 export type ExperimentRequest = z.infer<typeof experimentRequestSchema>;

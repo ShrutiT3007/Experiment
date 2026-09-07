@@ -78,13 +78,12 @@ function parseApiResponse(value: unknown): ParsedApiResponse {
   };
 }
 
-export function normalizeQaExecutionResult(qaResponse: unknown): NormalizedQaExecutionResult {
-  const data = qaResponse as any;
-  const resultBlock = data?.result;
-  const rawItems: any[] = Array.isArray(resultBlock?.data) ? resultBlock.data : [];
-
-  const testcases: NormalizedQaTestcaseResult[] = rawItems
-    .filter((item) => item && typeof item === 'object')
+/** Shared per-item mapping used by both single-flow execution results and
+ * multi-flow /services/trigger results -- both embed the same
+ * { id, output, apiResponse } shape. */
+function mapQaResultItems(rawItems: unknown[]): NormalizedQaTestcaseResult[] {
+  return rawItems
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
     .map((item) => {
       const parsed = parseApiResponse(item.apiResponse);
       return {
@@ -97,11 +96,58 @@ export function normalizeQaExecutionResult(qaResponse: unknown): NormalizedQaExe
         raw: item
       };
     });
+}
+
+export function normalizeQaExecutionResult(qaResponse: unknown): NormalizedQaExecutionResult {
+  const data = qaResponse as any;
+  const resultBlock = data?.result;
+  const rawItems: any[] = Array.isArray(resultBlock?.data) ? resultBlock.data : [];
 
   return {
     executionStatus: 'COMPLETED',
     message: typeof resultBlock?.message === 'string' ? resultBlock.message : null,
-    testcases,
+    testcases: mapQaResultItems(rawItems),
+    raw: qaResponse
+  };
+}
+
+export interface NormalizedTriggeredFlow {
+  qaFlowId: number | null;
+  status: string | null;
+  testcases: NormalizedQaTestcaseResult[];
+}
+
+export interface NormalizedServiceTriggerResult {
+  serviceName: string | null;
+  status: string | null;
+  message: string | null;
+  flows: NormalizedTriggeredFlow[];
+  raw: unknown;
+}
+
+/**
+ * Normalizes POST /api/v1/qa-testing/services/trigger's response:
+ * { result: { data: { serviceName, status, flows: [ { qaFlowId, status,
+ * result: [ { id, output, apiResponse } ] } ] }, message }, error }
+ */
+export function normalizeServiceTriggerResult(qaResponse: unknown): NormalizedServiceTriggerResult {
+  const data = qaResponse as any;
+  const resultData = data?.result?.data;
+  const rawFlows: any[] = Array.isArray(resultData?.flows) ? resultData.flows : [];
+
+  const flows: NormalizedTriggeredFlow[] = rawFlows
+    .filter((flow) => flow && typeof flow === 'object')
+    .map((flow) => ({
+      qaFlowId: typeof flow.qaFlowId === 'number' ? flow.qaFlowId : null,
+      status: typeof flow.status === 'string' ? flow.status : null,
+      testcases: mapQaResultItems(Array.isArray(flow.result) ? flow.result : [])
+    }));
+
+  return {
+    serviceName: typeof resultData?.serviceName === 'string' ? resultData.serviceName : null,
+    status: typeof resultData?.status === 'string' ? resultData.status : null,
+    message: typeof data?.result?.message === 'string' ? data.result.message : null,
+    flows,
     raw: qaResponse
   };
 }

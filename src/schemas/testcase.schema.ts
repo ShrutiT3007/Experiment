@@ -37,7 +37,13 @@ export type QaTestcaseResponse = z.infer<typeof qaTestcaseResponseSchema>;
 export const qaFlowPayloadSchema = z.object({
   flowName: z.string(),
   flow: z.record(z.unknown()).default({}),
-  data: z.record(z.unknown()).default({})
+  data: z.record(z.unknown()).default({}),
+  /** Service that owns this flow, used by the QA framework's qa_services
+   * mapping (serviceName -> qaFlowId). Optional here since the experiment
+   * context's service is itself optional; the QA service enforces its own
+   * requiredness when serviceName is actually needed (e.g. for later
+   * /services/trigger lookups). */
+  serviceName: z.string().min(1).optional()
 });
 export type QaFlowPayload = z.infer<typeof qaFlowPayloadSchema>;
 

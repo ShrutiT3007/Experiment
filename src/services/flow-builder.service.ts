@@ -23,7 +23,8 @@ export class FlowBuilderService {
   async buildFlow(
     plan: ExperimentPlan,
     createdTestcases: CreatedTestcase[],
-    experimentId: number | null
+    experimentId: number | null,
+    serviceName?: string
   ): Promise<BuiltFlow> {
     const byPlanIndex = new Map(createdTestcases.map((tc) => [tc.planIndex, tc]));
 
@@ -46,7 +47,8 @@ export class FlowBuilderService {
     const payload: QaFlowPayload = qaFlowPayloadSchema.parse({
       flowName: plan.flow.name || `Experiment Generated Flow ${Date.now()}`,
       flow,
-      data: plan.flow.data ?? {}
+      data: plan.flow.data ?? {},
+      ...(serviceName ? { serviceName } : {})
     });
 
     const response = await this.qa.createFlow(payload);

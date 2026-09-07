@@ -41,7 +41,8 @@ export function buildExperimentService(overrides?: {
     runner,
     assertionService,
     evidenceService,
-    cleanupService
+    cleanupService,
+    qaAdapter
   });
 
   return { experimentService, qaAdapter, mockAdapter };

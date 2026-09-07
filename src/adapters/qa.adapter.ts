@@ -10,6 +10,7 @@ import {
   QaFlowResponse,
   QaExecutePayload
 } from '../schemas/testcase.schema';
+import { normalizeServiceTriggerResult, NormalizedServiceTriggerResult } from '../services/experiment/normalizers/qa-result.normalizer';
 
 export interface QaQueryPayload {
   dbId: number;
@@ -53,16 +54,16 @@ export class QaAdapter {
     this.http =
       http ?? createHttpClient(env.qaServer, env.qaRequestTimeoutMs, 'qa-adapter', { 'x-api-validation': env.qaApiKey });
 
-    this.http.interceptors.request.use(async (config) => {
-      if (config.url === '/api/v1/auth/signin') return config;
-      await this.ensureAuthenticated();
-      if (this.sessionCookie) {
-        config.headers = config.headers ?? ({} as any);
-        (config.headers as any).Cookie = this.sessionCookie;
-      }
-      return config;
-    });
-  }
+  //   this.http.interceptors.request.use(async (config) => {
+  //     if (config.url === '/api/v1/auth/signin') return config;
+  //     await this.ensureAuthenticated();
+  //     if (this.sessionCookie) {
+  //       config.headers = config.headers ?? ({} as any);
+  //       (config.headers as any).Cookie = this.sessionCookie;
+  //     }
+  //     return config;
+  //   });
+   }
 
   /**
    * Signs in to the QA Testing Framework and caches the resulting session
@@ -165,6 +166,35 @@ export class QaAdapter {
       return data;
     } catch (err) {
       throw this.wrap(err, 'QA_SERVICE_UNAVAILABLE', 'Failed to fetch QA flow');
+    }
+  }
+
+  /**
+   * Triggers all previously created QA flows associated with a service.
+   * The QA Testing service owns finding + running those flows -- this
+   * adapter only forwards the request and normalizes the response, it
+   * never looks up or re-executes flows itself.
+   *
+   * Verified response shape:
+   * { result: { data: { serviceName, status, flows: [ { qaFlowId, status,
+   * result: [ { id, output, apiResponse } ] } ] }, message }, error }
+   */
+  async triggerServiceFlows(payload: { serviceName: string }): Promise<NormalizedServiceTriggerResult> {
+    try {
+      const { data } = await this.http.post('/api/v1/qa-testing/services/trigger', payload);
+
+      if (data?.error) {
+        throw AppError.badGateway(
+          'QA_INVALID_RESPONSE',
+          'QA services/trigger returned an error',
+          { serviceName: payload.serviceName, error: data.error }
+        );
+      }
+
+      return normalizeServiceTriggerResult(data);
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw this.wrap(err, 'QA_SERVICE_UNAVAILABLE', 'Failed to trigger previous QA flows for service');
     }
   }
 

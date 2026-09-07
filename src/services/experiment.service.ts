@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import { ExperimentRequest } from '../schemas/experiment.schema';
+import { QaAdapter } from '../adapters/qa.adapter';
 import { ExperimentPlanner } from './experiment-planner.service';
 import { TestcaseGeneratorService } from './testcase-generator.service';
 import { FlowBuilderService } from './flow-builder.service';
@@ -43,6 +44,7 @@ export interface ExperimentServiceDeps {
   assertionService: AssertionService;
   evidenceService: EvidenceService;
   cleanupService: CleanupService;
+  qaAdapter: QaAdapter;
 }
 
 /**
@@ -87,6 +89,38 @@ export class ExperimentService {
       // (experimentRequestSchema). Nothing further to do here beyond
       // logging the transition for observability (section 43).
 
+      const serviceName = request.context?.service;
+
+      if (request.runPreviousQaFlows) {
+        // serviceName is guaranteed by experimentRequestSchema's superRefine
+        // when runPreviousQaFlows=true. The QA Testing service owns finding
+        // and running the previously associated flows -- we only forward
+        // the trigger request, never reimplement that lookup here.
+        log.info({ operation: 'qa.triggerPreviousFlows', serviceName }, 'Triggering previous QA flows for service');
+        try {
+          const triggerResult = await withTimeout(
+            this.deps.qaAdapter.triggerServiceFlows({ serviceName: serviceName as string })
+          );
+          log.info(
+            {
+              operation: 'qa.triggerPreviousFlows',
+              serviceName,
+              status: triggerResult.status,
+              flowsTriggered: triggerResult.flows.length,
+              flowIds: triggerResult.flows.map((f) => f.qaFlowId)
+            },
+            'Previous QA flows triggered'
+          );
+        } catch (err) {
+          log.error({
+            operation: 'qa.triggerPreviousFlows',
+            serviceName,
+            error: (err as Error).message
+          });
+          throw err;
+        }
+      }
+
       status = 'PLANNING';
       log.info({ operation: 'lifecycle', status });
       const plan = await withTimeout(
@@ -120,7 +154,7 @@ export class ExperimentService {
         log.info({ operation: 'lifecycle', status });
         await updateExperimentStatus(dbExperimentId, status);
         const builtFlow = await withTimeout(
-          this.deps.flowBuilder.buildFlow(plan, createdTestcases, dbExperimentId)
+          this.deps.flowBuilder.buildFlow(plan, createdTestcases, dbExperimentId, serviceName)
         );
         ctx.createdFlows.push(builtFlow.qaFlowId);
         qaFlowId = builtFlow.qaFlowId;

@@ -68,4 +68,58 @@ describe('QaAdapter', () => {
     const result = await qa.createQuery({ dbId: 5, queryType: 'SELECT', query: 'SELECT COUNT(*) as count FROM t' });
     expect(result.id).toBe(88);
   });
+
+  it('triggers previously created QA flows for a service and normalizes the response', async () => {
+    const scope = nock(QA_SERVER)
+      .post('/api/v1/qa-testing/services/trigger', { serviceName: 'SQS' })
+      .reply(200, {
+        result: {
+          data: {
+            serviceName: 'SQS',
+            status: 'SUCCESS',
+            flows: [
+              {
+                qaFlowId: 8,
+                status: 'TRIGGERED',
+                result: [
+                  {
+                    id: 5,
+                    output: 'Api response is valid ',
+                    apiResponse: JSON.stringify({ status: 200, statusText: 'OK', headers: {}, data: { ok: true } })
+                  }
+                ]
+              }
+            ]
+          },
+          message: 'QA flows for the service have been triggered.'
+        },
+        error: null
+      });
+    const qa = new QaAdapter();
+    const result = await qa.triggerServiceFlows({ serviceName: 'SQS' });
+    expect(scope.isDone()).toBe(true);
+    expect(result.serviceName).toBe('SQS');
+    expect(result.status).toBe('SUCCESS');
+    expect(result.flows).toHaveLength(1);
+    expect(result.flows[0]).toMatchObject({ qaFlowId: 8, status: 'TRIGGERED' });
+    expect(result.flows[0].testcases[0]).toMatchObject({ testcaseId: 5, status: 200, passedByQa: true });
+  });
+
+  it('throws QA_INVALID_RESPONSE when /services/trigger responds with a non-null error field', async () => {
+    nock(QA_SERVER)
+      .post('/api/v1/qa-testing/services/trigger')
+      .reply(200, { result: null, error: { errorCode: 'ERR-500', message: 'boom' } });
+    const qa = new QaAdapter();
+    await expect(qa.triggerServiceFlows({ serviceName: 'SQS' })).rejects.toMatchObject({
+      code: 'QA_INVALID_RESPONSE'
+    });
+  });
+
+  it('wraps a /services/trigger failure as QA_SERVICE_UNAVAILABLE', async () => {
+    nock(QA_SERVER).post('/api/v1/qa-testing/services/trigger').reply(500, { message: 'boom' });
+    const qa = new QaAdapter();
+    await expect(qa.triggerServiceFlows({ serviceName: 'payment-service' })).rejects.toMatchObject({
+      code: 'QA_SERVICE_UNAVAILABLE'
+    });
+  });
 });

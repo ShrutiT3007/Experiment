@@ -67,4 +67,22 @@ describe('FlowBuilderService', () => {
     const badPlan = plan({ flow: { name: 'bad', testcaseOrder: [0, 5] } });
     await expect(service.buildFlow(badPlan, created(), null)).rejects.toThrow();
   });
+
+  it('includes serviceName in the QA flow payload when provided', async () => {
+    const qa = { createFlow: jest.fn().mockResolvedValue({ id: 999 }) } as unknown as QaAdapter;
+    const service = new FlowBuilderService(qa);
+    await service.buildFlow(plan(), created(), null, 'payment-service');
+
+    const payloadArg = (qa.createFlow as jest.Mock).mock.calls[0][0];
+    expect(payloadArg.serviceName).toBe('payment-service');
+  });
+
+  it('omits serviceName from the QA flow payload when not provided', async () => {
+    const qa = { createFlow: jest.fn().mockResolvedValue({ id: 999 }) } as unknown as QaAdapter;
+    const service = new FlowBuilderService(qa);
+    await service.buildFlow(plan(), created(), null);
+
+    const payloadArg = (qa.createFlow as jest.Mock).mock.calls[0][0];
+    expect(payloadArg.serviceName).toBeUndefined();
+  });
 });
